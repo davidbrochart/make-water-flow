@@ -5,6 +5,23 @@ dependencies:
   - voila
   - bqplot
   - numpy
+  - pandas
+  - ipywidgets
+  - ipyleaflet
+  - pillow
+  - matplotlib
+  - xarray
+  - xarray
+  - dask
+  - distributed
+  - dask-kubernetes
+  - tornado=5.1.1
+  - zarr
+  - intake
+  - intake-xarray
+  - pip
   - pip:
     - ipyvuetify
     - voila-vuetify
+    - ipydatetime
+    - gcsfs
