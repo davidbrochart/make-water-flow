@@ -4,6 +4,7 @@ channels:
   - defaults
 dependencies:
   - voila
+  - jupyterlab
   - nbserverproxy
   - bqplot
   - numpy
@@ -13,7 +14,6 @@ dependencies:
   - pillow
   - matplotlib
   - xarray
-  - xarray
   - dask
   - distributed
   - dask-kubernetes
@@ -21,9 +21,9 @@ dependencies:
   - zarr
   - intake
   - intake-xarray
+  - rasterio
+  - pyproj
   - pip
   - pip:
-    - ipyvuetify
-    - voila-vuetify
     - ipydatetime
     - gcsfs

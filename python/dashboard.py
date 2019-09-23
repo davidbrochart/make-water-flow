@@ -11,6 +11,9 @@ import PIL
 from base64 import b64encode
 from io import BytesIO
 import matplotlib.pyplot as plt
+from rasterio.warp import reproject, Resampling
+import rasterio
+from pyproj import Proj, transform
 
 import xarray as xr
 from gcsfs import mapping
@@ -30,6 +33,7 @@ class Map_menu(object):
         self.geojson = None
         self.marker_or_geojson = None
         self.current_io = None
+        self.da = None
     def show(self, **kwargs):
         if not self.show_menu:
             if kwargs.get('type') == 'contextmenu':
@@ -46,6 +50,9 @@ class Map_menu(object):
                 self.m.add_layer(self.p)
             elif kwargs.get('type') == 'mousemove':
                 self.coord = kwargs.get('coordinates')
+                lat, lon = self.coord
+                if self.da is not None:
+                    self.label.value = str(self.da.sel(lat=lat, lon=lon, method='nearest').values)
     def get_choice(self, x):
         self.show_menu = False
         self.s.close()
@@ -94,6 +101,25 @@ map_menu = Map_menu(m, label, file_upload)
 m.on_interaction(map_menu.show)
 file_upload.observe(map_menu.show_geojson, 'value')
 
+def to_webmercator(source, affine, bounds):
+    with rasterio.Env():
+        rows, cols = source.shape
+        src_transform = affine
+        src_crs = {'init': 'EPSG:4326'}
+        dst_crs = {'init': 'EPSG:3857'}
+        dst_transform, width, height = rasterio.warp.calculate_default_transform(src_crs, dst_crs, cols, rows, *bounds)
+        dst_shape = height, width
+        destination = np.zeros(dst_shape)
+        reproject(
+            source,
+            destination,
+            src_transform=src_transform,
+            src_crs=src_crs,
+            dst_transform=dst_transform,
+            dst_crs=dst_crs,
+            resampling=Resampling.nearest)
+    return destination, dst_transform, dst_shape
+
 def get_img(a_web):
     a_norm = a_web - np.nanmin(a_web)
     vmax = np.nanmax(a_norm)
@@ -113,14 +139,18 @@ def get_img(a_web):
     return imgurl
 
 def overlay(m, current_io, da, label):
-    imgurl = get_img(da.values)
-    bounds = [(
-        da.lat.values[-1] - 0.5 * 0.1,
-        da.lon.values[0] - 0.5 * 0.1
-        ), (
-        da.lat.values[0] + 0.5 * 0.1,
-        da.lon.values[-1] + 0.5 * 0.1)
-        ]
+    lats, lons = da.lat.values, da.lon.values
+    affine = [0.1, 0, lons[0]-0.5*0.1, 0, -0.1, lats[-1]+0.5*0.1]
+    bounds = [lons[0]-0.5*0.1, lats[0]-0.5*0.1, lons[-1]+0.5*0.1, lats[-1]+0.5*0.1]
+    a_web, affine, shape = to_webmercator(da.values[::-1], affine, bounds)
+    inProj = Proj(init='epsg:3857')
+    outProj = Proj(init='epsg:4326')
+    x1, y1 = affine[2], affine[5]
+    x2, y2 = transform(inProj, outProj, x1, y1)
+    x3, y3 = affine[2] + shape[1] * affine[0], affine[5] + shape[0] * affine[4]
+    x4, y4 = transform(inProj, outProj, x3, y3)
+    bounds = [(y4, x2), (y2, x4)]
+    imgurl = get_img(a_web)
     io = ImageOverlay(url=imgurl, bounds=bounds, opacity=0.5)
     if current_io is not None:
         m.remove_layer(current_io)
@@ -138,6 +168,8 @@ def _get_precipitation(ds, map_menu, line, label, at_time=None, from_time=None, 
                 t1 = to_time.value
                 da = ds.precipitationCal.sel(time=slice(t0, t1)).sum(['time']).compute()
                 label.value = str(ds.precipitationCal.sel(time=slice(from_time.value, to_time.value)).time)
+            da = da.sel(lat=slice(-85, 85)).compute()
+            map_menu.da = da
             io = overlay(map_menu.m, map_menu.current_io, da, label)
             map_menu.current_io = io
         else:
