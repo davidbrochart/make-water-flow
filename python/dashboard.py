@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import bqplot as bq
-import ipywidgets as widgets
+from ipywidgets import HBox, Label, Button, ToggleButtons, FileUpload
 import ipydatetime
 from ipyleaflet import Map, Popup, Marker, GeoJSON, basemaps, ImageOverlay
 import json
@@ -29,22 +29,23 @@ class Map_menu(object):
         self.marker = None
         self.geojson = None
         self.marker_or_geojson = None
-        self.precipitation = None
         self.current_io = None
     def show(self, **kwargs):
         if not self.show_menu:
             if kwargs.get('type') == 'contextmenu':
                 self.show_menu = True
-                options = ['Show marker', 'Show GeoJSON']
+                options = ['Show marker']
+                if self.geojson is None:
+                    options += ['Show GeoJSON']
                 if self.marker_or_geojson is not None:
                     options += [f'Remove {self.marker_or_geojson}']
-                if self.precipitation is not None:
-                    options += ['Remove precipitation']
                 options += ['Close']
-                self.s = widgets.ToggleButtons(options=options, value=None)
+                self.s = ToggleButtons(options=options, value=None)
                 self.s.observe(self.get_choice, names='value')
                 self.p = Popup(location=self.coord, child=self.s, max_width=160, close_button=False, auto_close=True, close_on_escape_key=False)
                 self.m.add_layer(self.p)
+            elif kwargs.get('type') == 'mousemove':
+                self.coord = kwargs.get('coordinates')
     def get_choice(self, x):
         self.show_menu = False
         self.s.close()
@@ -55,8 +56,10 @@ class Map_menu(object):
             self.show_marker()
         elif choice == 'Show GeoJSON':
             self.show_geojson()
-        elif choice == 'Remove all':
-            self.remove_all()
+        elif choice == 'Remove marker':
+            self.remove_marker()
+        elif choice == 'Remove GeoJSON':
+            self.remove_geojson()
         elif choice == 'Close':
             pass
     def show_geojson(self, *args):
@@ -65,7 +68,7 @@ class Map_menu(object):
         self.remove_geojson()
         self.geojson = GeoJSON(data=data, style = {'color': 'green'})#, 'opacity': 1})#, 'fillOpacity':0.1})
         self.m.add_layer(self.geojson)
-        self.marker_or_geojson = 'geojson'
+        self.marker_or_geojson = 'GeoJSON'
     def show_marker(self):
         self.remove_marker()
         self.remove_geojson()
@@ -73,7 +76,7 @@ class Map_menu(object):
         self.m.add_layer(self.marker)
         self.marker_or_geojson = 'marker'
     def remove_marker(self):
-        if self.maker is not None:
+        if self.marker is not None:
             self.m.remove_layer(self.marker)
             self.marker = None
         self.marker_or_geojson = None
@@ -83,8 +86,8 @@ class Map_menu(object):
             self.geojson = None
         self.marker_or_geojson = None
 
-label = widgets.Label()
-file_upload = widgets.FileUpload(accept='.geojson',  multiple=False, description='Upload GeoJSON')
+label = Label()
+file_upload = FileUpload(accept='.geojson,.json',  multiple=False, description='Upload GeoJSON')
 
 m = Map(center=(-10, -60), zoom=4, interpolation='nearest', basemap=basemaps.CartoDB.DarkMatter)
 map_menu = Map_menu(m, label, file_upload)
@@ -206,12 +209,15 @@ fig, line = create_plot()
 
 from_time = ipydatetime.DatetimePicker(value=datetime(2000, 6, 1), min=datetime(2000, 6, 1), max=datetime(2019, 9, 1))
 to_time = ipydatetime.DatetimePicker(value=datetime(2000, 8, 31), min=datetime(2000, 6, 1), max=datetime(2019, 9, 1))
-go_time_range = widgets.Button(description='Go!', tooltip='Show accumulated precipitation')
+go_time_range = Button(description='Go!', tooltip='Show accumulated precipitation')
 at_time = ipydatetime.DatetimePicker(value=datetime(2000, 6, 1), min=datetime(2000, 6, 1), max=datetime(2019, 9, 1))
-go_at_time = widgets.Button(description='Go!', tooltip='Show instant precipitation')
+go_at_time = Button(description='Go!', tooltip='Show instant precipitation')
 
 get_precipitation_at_time = _get_precipitation(ds_time, map_menu, line, label, at_time=at_time)
 get_precipitation_time_range = _get_precipitation(ds_time, map_menu, line, label, from_time=from_time, to_time=to_time)
 
 go_at_time.on_click(get_precipitation_at_time)
 go_time_range.on_click(get_precipitation_time_range)
+
+show_precipitation_time_range = HBox([Label('Show precipitation from'), from_time, Label('to'), to_time, go_time_range])
+show_precipitation_at_time = HBox([Label('Show precipitation at'), at_time, go_at_time])
