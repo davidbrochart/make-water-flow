@@ -169,11 +169,11 @@ def _get_precipitation(ds, map_menu, line, label, out, at_time=None, from_time=N
                 t1 = to_time.value
                 da = ds.precipitationCal.sel(time=slice(t0, t1)).sum(['time']).persist()
             pbar = progress(da, notebook=True, multi=False)
-            #out.clear_output()
+            out.clear_output()
             with out:
                 display(pbar)
             #hbox.children = list(hbox.children) + [pbar.bar_widget]
-            #map_menu.da = da.sel(lat=slice(-85, 85)).compute()
+            map_menu.da = da.sel(lat=slice(-85, 85)).compute()
             io = overlay(map_menu.m, map_menu.current_io, da, label)
             map_menu.current_io = io
         else:
