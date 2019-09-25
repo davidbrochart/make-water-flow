@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import bqplot as bq
-from ipywidgets import HBox, Label, Button, ToggleButtons, FileUpload
+from ipywidgets import HBox, Label, Button, ToggleButtons, FileUpload, Output
 import ipydatetime
 from ipyleaflet import Map, Popup, Marker, GeoJSON, basemaps, ImageOverlay
 import json
@@ -14,11 +14,12 @@ import matplotlib.pyplot as plt
 from rasterio.warp import reproject, Resampling
 import rasterio
 from pyproj import Proj, transform
+from IPython.display import display
 
 import xarray as xr
 from gcsfs import mapping
 from dask_kubernetes import KubeCluster as Cluster
-from dask.distributed import Client
+from dask.distributed import Client, progress
 
 class Map_menu(object):
     def __init__(self, m, label, file_upload):
@@ -157,19 +158,22 @@ def overlay(m, current_io, da, label):
     m.add_layer(io)
     return io
 
-def _get_precipitation(ds, map_menu, line, label, at_time=None, from_time=None, to_time=None):
+def _get_precipitation(ds, map_menu, line, label, out, at_time=None, from_time=None, to_time=None):
     def _(w):
         if map_menu.marker is None:
             if at_time is not None:
                 t = at_time.value
-                da = ds.precipitationCal.sel(time=t, method='nearest').compute()
+                da = ds.precipitationCal.sel(time=t, method='nearest').persist()
             else:
                 t0 = from_time.value
                 t1 = to_time.value
-                da = ds.precipitationCal.sel(time=slice(t0, t1)).sum(['time']).compute()
-                label.value = str(ds.precipitationCal.sel(time=slice(from_time.value, to_time.value)).time)
-            da = da.sel(lat=slice(-85, 85)).compute()
-            map_menu.da = da
+                da = ds.precipitationCal.sel(time=slice(t0, t1)).sum(['time']).persist()
+            pbar = progress(da, notebook=True, multi=False)
+            #out.clear_output()
+            with out:
+                display(pbar)
+            #hbox.children = list(hbox.children) + [pbar.bar_widget]
+            #map_menu.da = da.sel(lat=slice(-85, 85)).compute()
             io = overlay(map_menu.m, map_menu.current_io, da, label)
             map_menu.current_io = io
         else:
@@ -245,11 +249,14 @@ go_time_range = Button(description='Go!', tooltip='Show accumulated precipitatio
 at_time = ipydatetime.DatetimePicker(value=datetime(2000, 6, 1), min=datetime(2000, 6, 1), max=datetime(2019, 9, 1))
 go_at_time = Button(description='Go!', tooltip='Show instant precipitation')
 
-get_precipitation_at_time = _get_precipitation(ds_time, map_menu, line, label, at_time=at_time)
-get_precipitation_time_range = _get_precipitation(ds_time, map_menu, line, label, from_time=from_time, to_time=to_time)
+pbar_at_time = Output()
+pbar_time_range = Output()
+
+show_precipitation_time_range = HBox([Label('Show precipitation from'), from_time, Label('to'), to_time, go_time_range, pbar_time_range])
+show_precipitation_at_time = HBox([Label('Show precipitation at'), at_time, go_at_time, pbar_at_time])
+
+get_precipitation_at_time = _get_precipitation(ds_time, map_menu, line, label, pbar_at_time, at_time=at_time)
+get_precipitation_time_range = _get_precipitation(ds_time, map_menu, line, label, pbar_time_range, from_time=from_time, to_time=to_time)
 
 go_at_time.on_click(get_precipitation_at_time)
 go_time_range.on_click(get_precipitation_time_range)
-
-show_precipitation_time_range = HBox([Label('Show precipitation from'), from_time, Label('to'), to_time, go_time_range])
-show_precipitation_at_time = HBox([Label('Show precipitation at'), at_time, go_at_time])
